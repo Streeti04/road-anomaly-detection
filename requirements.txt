@@ -1,0 +1,15 @@
+# Pinned to the working .venv (python 3.12). Install: python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
+numpy==2.5.2
+opencv-python-headless==4.14.0.94
+scipy==1.18.1
+matplotlib==3.11.1
+torch==2.13.0
+torchvision==0.28.0
+# MobileSAM is not published on PyPI as mobile_sam==1.0.
+# Install the Python package from the pinned upstream commit; it is imported as `mobile_sam`.
+mobile-sam @ git+https://github.com/ChaoningZhang/MobileSAM.git@f706ad9c4eb7f219c00d9050e46328518ffb65d2
+# mobile_sam's tiny_vit imports timm.models.layers, which was removed in timm 1.x.
+timm==0.9.16
+pytest==8.4.2
+# Optional full-SAM comparison path:
+# python -m pip install "segment-anything @ git+https://github.com/facebookresearch/segment-anything.git"

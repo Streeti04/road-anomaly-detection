@@ -1,0 +1,18 @@
+# environments & caches
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
+opencode.json
+
+# data & large artifacts (live on an external volume)
+data
+artifacts
+models/
+outputs/
+logs/
+*.egg-info/
+.ipynb_checkpoints/
+
+# outputs/ holds masks/, patches/, runs/, flags.csv — all regenerable
