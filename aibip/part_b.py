@@ -217,8 +217,8 @@ def figures(data_dir) -> None:
     print(f"flags(B): {len(rows)} rows over {len(paths)} images")
     jobs = [
         (figure_roi_examples, random.Random(config.SEED).sample(paths, 12), "b_roi_examples.jpg"),
-        (figure_fft, random.Random(config.SEED + 1).sample(paths, 3)), "b_fft.png"),
-        (figure_filters, random.Random(config.SEED + 2).sample(paths, 3)), "b_filters.png"),
+        (figure_fft, sorted(random.Random(config.SEED + 1).sample(paths, 3)), "b_fft.png"),
+        (figure_filters, sorted(random.Random(config.SEED + 2).sample(paths, 3)), "b_filters.png"),
     ]
     for builder, picked, name in jobs:
         out_path = config.FIGURES_DIR / name
