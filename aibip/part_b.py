@@ -99,16 +99,48 @@ def write_flags(flag_rows: list, stage: str = "B") -> None:
         writer.writerows(flag_rows)
 
 
-def run_flags(image_paths: list) -> list:
-    """Load every image, collect hood-strip stats, flag outliers, write flags.csv."""
-    records = []
-    for i, path in enumerate(image_paths, 1):
-        stats = hood_strip_stats(imgio.load_image(path))
-        records.append({"image_id": Path(path).stem, **stats})
-        if i % 25 == 0:
-            print(f"flags: {i}/{len(image_paths)} images processed")
-    rows = flag_outliers(records)
-    write_flags(rows)
-    return rows
+def _label(image: np.ndarray, org: tuple, text: str) -> None:
+    """White text with a 1px-offset black shadow so it reads on any background."""
+    cv2.putText(image, text, (org[0] + 1, org[1] + 1),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 1, cv2.LINE_AA)
+    cv2.putText(image, text, org, cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
 
 
+def preview(data_dir, n: int = 12, seed: int = config.SEED) -> None:
+    """Write a montage of the historical preprocess() work view used for D.
+
+    The quick check when tuning ROI/config constants: run, then view
+    outputs/preview_preprocess.jpg.
+    """
+    paths = imgio.list_images(data_dir)
+    if not paths:
+        raise ValueError(f"no images found in {data_dir}")
+    if len(paths) > n:
+        paths = random.Random(seed).sample(paths, n)
+    config.OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+    tiles = []
+    for path in paths:
+        out = preprocess(imgio.load_image(path))
+        h, w = out.shape[:2]
+        tile = imgio.resize(out, (round(h * 1024 / w), 1024))
+        _label(tile, (8, 24), Path(path).stem)
+        tiles.append(tile)
+    out_path = config.OUTPUTS_DIR / "preview_preprocess.jpg"
+    imgio.save_image(out_path, imgio.montage(tiles, cols=3, pad=6))
+    print(f"wrote {out_path} ({len(tiles)} tiles, preprocess output {h}x{w})")
+
+
+def main(argv=None) -> None:
+    parser = argparse.ArgumentParser(description="Part B: preprocessing flags and preview")
+    sub = parser.add_subparsers(dest="command", required=True)
+    prev_parser = sub.add_parser("preview", help="montage of preprocess() outputs")
+    prev_parser.add_argument("data_dir", help="directory with raw street JPEGs")
+    prev_parser.add_argument("--n", type=int, default=12, help="number of images")
+    prev_parser.add_argument("--seed", type=int, default=config.SEED, help="sampling seed")
+    args = parser.parse_args(argv)
+    if args.command == "preview":
+        preview(args.data_dir, n=args.n, seed=args.seed)
+
+
+if __name__ == "__main__":
+    main()
