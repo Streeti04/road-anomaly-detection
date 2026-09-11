@@ -1,4 +1,4 @@
-"""Part B: work view for Part D (crop, resize, CLAHE), flags and figures."""
+"""Part B: explicit C RGB view and historical D work view, plus figures."""
 
 import argparse
 import csv
@@ -6,10 +6,74 @@ import random
 from pathlib import Path
 
 import cv2
+import matplotlib
 import numpy as np
 
 from aibip import config, imgio
 from aibip.stats import outlier_flag_rows
+
+# B owns both views: unenhanced RGB for C and the historical BGR work view for D.
+# Keep these constants out of config.py to preserve existing D cache identities.
+SEGMENT_TOP = .45
+SEGMENT_BOTTOM = .73
+SEGMENT_WIDTH = 1024
+
+
+def segmentation_geometry(raw_shape):
+    """Coordinate contract between B's segmenter view and its unchanged D view."""
+    h, w = raw_shape[:2]
+    c0, c1 = int(h * SEGMENT_TOP), int(h * SEGMENT_BOTTOM)
+    b0, b1 = int(h * config.ROI_TOP_FRAC), int(h * config.ROI_BOTTOM_FRAC)
+    out_w = int(config.WORK_WIDTH)
+    if not (0 <= b0 < b1 <= h and 0 <= c0 < c1 <= h and w > 0 and out_w > 0):
+        raise ValueError('Invalid image size or C/B crop geometry')
+    return dict(crop_bounds=[0, c0, w, c1], target_crop_bounds=[0, b0, w, b1],
+                target_shape=[max(1, round((b1-b0)*out_w/w)), out_w])
+
+
+def segmentation_crop_rgb(raw_bgr):
+    """Remove hood/sky for C; preserve the original crop and channel conversion."""
+    if raw_bgr.ndim != 3 or raw_bgr.shape[2] != 3 or raw_bgr.dtype != np.uint8:
+        raise ValueError('segment_road expects a raw HxWx3 uint8 BGR image')
+    geo = segmentation_geometry(raw_bgr.shape)
+    _, y0, _, y1 = geo['crop_bounds']
+    return cv2.cvtColor(raw_bgr[y0:y1], cv2.COLOR_BGR2RGB)
+
+
+def resize_segmentation_rgb(image, width=SEGMENT_WIDTH):
+    """Same INTER_AREA call as the former C implementation, even at scale 1."""
+    h0, w0 = image.shape[:2]
+    w = min(w0, width)
+    h = max(1, round(h0 * w / w0))
+    return cv2.resize(image, (w, h), interpolation=cv2.INTER_AREA)
+
+
+def preprocess_for_segmentation(raw_bgr):
+    """B -> C: prepared RGB image (no CLAHE), plus original/work coordinates.
+
+    preprocess() remains the historical D work-view API, so trained AE inputs
+    retain exactly the same pixels. C consumes this separate, hood-free view.
+    """
+    crop = segmentation_crop_rgb(raw_bgr)
+    return resize_segmentation_rgb(crop), segmentation_geometry(raw_bgr.shape)
+
+
+def mask_to_work_view(small_mask, raw_shape):
+    """Nearest-neighbor C->native->work mapping, without a full native canvas."""
+    if small_mask.ndim != 2 or not small_mask.size:
+        raise ValueError('Expected a nonempty 2-D C mask')
+    geo = segmentation_geometry(raw_shape)
+    _, c0, raw_w, c1 = geo['crop_bounds']
+    _, b0, _, b1 = geo['target_crop_bounds']
+    out_h, out_w = geo['target_shape']
+    raw_y = np.floor(np.arange(out_h) * ((b1-b0)/out_h)).astype(int) + b0
+    raw_x = np.floor(np.arange(out_w) * (raw_w/out_w)).astype(int)
+    valid = (raw_y >= c0) & (raw_y < c1)
+    iy = np.floor((raw_y-c0) * (small_mask.shape[0]/(c1-c0))).astype(int)
+    ix = np.floor(raw_x * (small_mask.shape[1]/raw_w)).astype(int)
+    out = np.zeros((out_h, out_w), bool)
+    out[valid] = small_mask[iy[valid, None], ix[None, :]].astype(bool)
+    return out
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402 - backend must be selected first
@@ -47,13 +111,22 @@ def apply_clahe(image: np.ndarray) -> np.ndarray:
 
 
 def preprocess(image: np.ndarray) -> np.ndarray:
-    """D work view: 40--80% crop, resize to WORK_WIDTH, CLAHE on L channel.
+    """Historical D work view: 40--80% crop -> resize -> optional CLAHE.
 
-    Fixed crop instead of per-image hood detection: deterministic and cheap;
-    residual intrusions are flagged via hood_strip_stats -> flags.csv
-    ("flag, don't fix").
+    For C use preprocess_for_segmentation(), which owns the conservative
+    hood-removing 45--73% crop and produces unenhanced RGB. Keeping this work
+    view unchanged preserves all existing AE input pixels and coordinates.
+
+    Documented decisions (B.1/B.2):
+    - Fixed crop instead of per-image hood detection: the hood position is
+      consistent per vehicle, but framing may vary across the 10k pool; a fixed
+      crop is deterministic and cheap, and residual intrusions (chevron boards)
+      are flagged via hood_strip_stats -> flags.csv ("flag, don't fix").
+    - NO inverse-perspective/BEV warp: vanishing-point perspective is
+      compensated at analysis time via depth-band patch sampling in Part D
+      (explicitly allowed); a warp would resample the very
+      texture the Part-D autoencoder has to model.
     """
-
     band = crop_roi(image)
     out = resize_band(band)
     return apply_clahe(out) if config.USE_CLAHE else out
