@@ -193,6 +193,25 @@ def figure_filters(image_paths: list, out_path) -> None:
     plt.close(fig)
 
 
+def figure_clahe_ab(image_paths: list, out_path) -> None:
+    """Per image, the resized ROI band without vs with CLAHE (A/B decision figure)."""
+    if len(image_paths) != 3:
+        raise ValueError(f"figure_clahe_ab needs exactly 3 images, got {len(image_paths)}")
+    fig, axes = plt.subplots(3, 2, figsize=(12, 9))
+    for i, path in enumerate(image_paths):
+        band = resize_band(crop_roi(imgio.load_image(path)))
+        axes[i, 0].imshow(cv2.cvtColor(band, cv2.COLOR_BGR2RGB))
+        axes[i, 1].imshow(cv2.cvtColor(apply_clahe(band), cv2.COLOR_BGR2RGB))
+        axes[i, 0].set_title("CLAHE off" if i == 0 else None, fontsize=9)
+        axes[i, 1].set_title("CLAHE on" if i == 0 else None, fontsize=9)
+    for ax in axes.ravel():
+        ax.set_axis_off()
+    fig.suptitle("Part B: CLAHE A/B (shadow mitigation vs noise amplification)")
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=140)
+    plt.close(fig)
+
+
 def run_flags(image_paths: list) -> list:
     """Load every image, collect hood-strip stats, flag outliers, write flags.csv."""
     records = []
@@ -219,6 +238,7 @@ def figures(data_dir) -> None:
         (figure_roi_examples, random.Random(config.SEED).sample(paths, 12), "b_roi_examples.jpg"),
         (figure_fft, sorted(random.Random(config.SEED + 1).sample(paths, 3)), "b_fft.png"),
         (figure_filters, sorted(random.Random(config.SEED + 2).sample(paths, 3)), "b_filters.png"),
+        (figure_clahe_ab, sorted(random.Random(config.SEED + 3).sample(paths, 3)), "b_clahe_ab.png"),
     ]
     for builder, picked, name in jobs:
         out_path = config.FIGURES_DIR / name
