@@ -7,7 +7,9 @@ import numpy as np
 import pytest
 
 from aibip import config, imgio, mini, part_b
+from aibip.patch_filter import patch_confounder_label
 from aibip.part_b import preprocess
+from aibip.part_c import segment_road
 
 
 def test_resize_shapes():
@@ -213,5 +215,186 @@ def test_write_flags_preserves_other_stages(tmp_path, monkeypatch):
         rows = list(csv.DictReader(f))
     assert sum(r["stage"] == "B" for r in rows) == 1
     assert sum(r["stage"] == "C" for r in rows) == 1
+
+
+# --- Part C (T2) ----------------------------------------------------------------
+
+import importlib  # noqa: E402  (append-only section)
+import sys  # noqa: E402
+
+part_c = importlib.import_module("aibip.part_c")
+
+
+def test_select_candidate_prefers_center_over_side_spill():
+    h, w = 100, 100
+    side_spill = np.zeros((h, w), dtype=bool)
+    side_spill[45:90, 35:100] = True    # center hit, but large right-side grass merge
+    road = np.zeros((h, w), dtype=bool)
+    road[45:90, 42:58] = True           # clean center-road candidate
+    tiny = np.zeros((h, w), dtype=bool)
+    tiny[78:82, 48:52] = True           # anchor hit, too little center coverage
+    masks = np.stack([side_spill, road, tiny])
+    scores = np.array([0.9, 0.4, 0.99]) # raw SAM score must not decide this
+    mask, index = part_c.select_candidate(masks, scores, h, w)
+    assert index == 1
+    assert np.array_equal(mask, road)
+
+
+def test_select_candidate_prefers_more_center_hits():
+    h, w = 100, 100
+    masks = np.zeros((3, h, w), dtype=bool)
+    masks[0, 78:82, 48:52] = True       # only near anchor
+    masks[1, 60:90, 42:58] = True       # mid + near anchors
+    masks[2, 45:90, 44:56] = True       # far + mid + near anchors
+    scores = np.array([0.99, 0.5, 0.1])
+    mask, index = part_c.select_candidate(masks, scores, h, w)
+    assert index == 2
+    # deterministic: a second identical call must return the same candidate
+    assert np.array_equal(part_c.select_candidate(masks, scores, h, w)[0], mask)
+
+
+def test_road_corridor_removes_side_grass_merge():
+    mask = np.zeros((120, 200), dtype=bool)
+    mask[20:110, 20:190] = True         # road merged with right grass shoulder
+    corridor = part_c.road_corridor(mask)
+    assert corridor[80, 100]            # center road remains
+    assert not corridor[80, 185]        # far side spill removed
+    assert corridor.sum() < mask.sum()
+
+
+def test_select_candidate_with_image_rejects_thin_line():
+    h, w = 120, 200
+    proc = np.full((h, w, 3), 95, dtype=np.uint8)
+    thin = np.zeros((h, w), dtype=bool)
+    for y in range(35, 110):
+        x = 45 + y // 3
+        thin[y, x:x + 5] = True
+    road = np.zeros((h, w), dtype=bool)
+    road[35:110, 65:135] = True
+    masks = np.stack([thin, road])
+    scores = np.array([0.99, 0.1])
+    assert part_c.select_candidate_with_image(masks, scores, proc) == 1
+
+
+def test_expand_road_surface_grows_asphalt_not_grass():
+    h, w = 120, 200
+    proc = np.zeros((h, w, 3), dtype=np.uint8)
+    proc[:] = (40, 120, 40)              # vegetation background
+    proc[30:110, 60:140] = (95, 95, 95)  # asphalt-like road surface
+    seed = np.zeros((h, w), dtype=bool)
+    seed[40:105, 92:108] = True          # cautious MobileSAM center strip
+
+    expanded = part_c.expand_road_surface(proc, seed)
+
+    assert expanded[80, 70]
+    assert expanded[80, 130]
+    assert not expanded[80, 30]
+    assert not expanded[80, 170]
+    assert expanded.sum() > seed.sum()
+
+
+def test_allowed_region_border_clearance():
+    r = config.PATCH // 2    # 64
+    mask = np.zeros((614, 2048), dtype=bool)
+    mask[100:500, 200:1800] = True
+    region = part_c.allowed_region(mask)
+    ys, xs = np.nonzero(region)
+    # every True pixel sits >= PATCH//2 inside the rectangle border
+    assert ys.min() >= 100 + r and ys.max() <= 499 - r
+    assert xs.min() >= 200 + r and xs.max() <= 1799 - r
+    # probes: clearance of exactly r survives, r-1 and deep-edge do not
+    assert region[100 + r, 1024]
+    assert not region[100 + r - 1, 1024]
+    assert not region[100 + 10, 1024]
+    # strict subset: the rectangle corners are eroded away
+    assert not region[100, 200] and not region[499, 1799]
+    assert region.sum() < mask.sum()
+
+
+def test_clean_mask_picks_largest_component():
+    mask = np.zeros((614, 2048), dtype=bool)
+    mask[100:300, 200:400] = True     # big 200x200 blob
+    mask[400:420, 1000:1020] = True   # small 20x20 blob far away (survives open)
+    mask[50:53, 1500:1503] = True     # speckle
+    mask[500, 60] = True              # single-pixel speckle
+    cleaned = part_c.clean_mask(mask)
+    assert cleaned[200, 300]          # big blob survives
+    assert not cleaned[410, 1010]     # small blob removed: not the largest
+    assert not cleaned[51, 1501] and not cleaned[500, 60]
+    assert cleaned.sum() < 200 * 200  # open shaves the border, no satellites
+
+
+def test_mask_stats_values():
+    mask = np.zeros((100, 100), dtype=bool)
+    mask[30:50] = True                # 20% area, centroid row 39.5
+    stats = part_c.mask_stats(mask, 0.75)
+    assert stats["area_frac"] == pytest.approx(0.20)
+    assert stats["centroid_row_frac"] == pytest.approx(0.395)
+    assert stats["strip_cov"] == pytest.approx(0.0)  # rows [70, 85) untouched
+    assert stats["sam_score"] == pytest.approx(0.75)
+    assert stats["n_components"] == 1
+    empty = part_c.mask_stats(np.zeros((100, 100), dtype=bool), 0.0)
+    assert empty["area_frac"] == 0.0
+    assert empty["centroid_row_frac"] == 0.0
+    assert empty["n_components"] == 0
+
+
+def test_part_c_still_lazy():
+    part_c_mod = importlib.import_module("aibip.part_c")
+    assert callable(part_c_mod.segment_road)
+    # lazy singleton: importing the module must NOT have built the predictor
+    assert part_c_mod.__dict__.get("_PREDICTORS") == {}
+    # and no model backend may have been pulled in by the import chain
+    assert "torch" not in sys.modules
+    assert "mobile_sam" not in sys.modules
+
+
+# --------------------------------------------------------------- fetch_models
+
+def test_fetch_sha256_of(tmp_path):
+    import hashlib
+    from aibip import fetch_models
+
+    f = tmp_path / "blob.bin"
+    f.write_bytes(b"aibip" * 1000)
+    assert fetch_models.sha256_of(f) == hashlib.sha256(b"aibip" * 1000).hexdigest()
+
+
+def test_fetch_models_download_then_idempotent(tmp_path, monkeypatch, capsys):
+    from aibip import fetch_models
+
+    src = tmp_path / "src.bin"
+    src.write_bytes(b"weights" * 512)
+    digest = fetch_models.sha256_of(src)
+
+    models_dir = tmp_path / "models"
+    # fetch_models binds MODELS_DIR at import time, so patch there, not in config
+    monkeypatch.setattr(fetch_models, "MODELS_DIR", models_dir)
+    monkeypatch.setattr(
+        fetch_models, "SOURCES", {"fake.bin": (src.as_uri(), digest, src.stat().st_size)}
+    )
+
+    assert fetch_models.main() == 0            # first run: downloads
+    assert (models_dir / "fake.bin").read_bytes() == src.read_bytes()
+    assert not (models_dir / "fake.bin.part").exists()
+    assert fetch_models.main() == 0            # second run: skips
+    assert "already present" in capsys.readouterr().out
+
+
+def test_fetch_models_rejects_bad_checksum(tmp_path, monkeypatch):
+    from aibip import fetch_models
+
+    src = tmp_path / "src.bin"
+    src.write_bytes(b"corrupt")
+    models_dir = tmp_path / "models"
+    monkeypatch.setattr(config, "MODELS_DIR", models_dir)
+    monkeypatch.setattr(
+        fetch_models, "SOURCES", {"bad.bin": (src.as_uri(), "0" * 64, 7)}
+    )
+
+    with pytest.raises(SystemExit, match="checksum mismatch"):
+        fetch_models.main()
+    assert not (models_dir / "bad.bin").exists()      # nothing installed
+    assert not (models_dir / "bad.bin.part").exists() # temp cleaned up
 
 
