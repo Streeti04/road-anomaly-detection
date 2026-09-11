@@ -44,10 +44,22 @@ WORK_WIDTH = 2048
 
 PATCH = 128  # patch size in px fed to the Conv-AE
 N_BANDS = 4  # depth bands over road rows for perspective-aware sampling/scoring
-USE_CLAHE = True  # CLAHE on L channel in preprocessing
+USE_CLAHE = True  # CLAHE on L channel in preprocessing; A/B figure documents the rationale
 N_MINI = 100  # official mini-set size
 # Single global seed; mini-set sampling and patch RNG derive from it,
 # per-image derivations use stable hashes.
 SEED = 42
 
 IMG_EXTENSIONS = {".jpg", ".jpeg", ".png"}
+
+# --- Part C (Road segmentation) ---------------------------------------------
+C_BACKEND = "mobile_sam"  # "mobile_sam" default; "sam" optional full-SAM test path
+C_PROMPT_PROFILE = "basic"  # simple point prompts first; no side/box over-steering
+C_ROAD_CORE_HALF_TOP_FRAC = 0.10  # keep a center corridor after SAM; top rows are narrow
+C_ROAD_CORE_HALF_BOTTOM_FRAC = 0.22  # bottom rows may contain wider near-field road
+C_EXPAND_HALF_TOP_FRAC = 0.06
+C_EXPAND_HALF_BOTTOM_FRAC = 0.16
+C_ASPHALT_SAT_MIN = 20
+C_ASPHALT_LOW_SAT_VAL_MAX = 130  # low-saturation pixels are accepted only when not bright sidewalk
+C_ASPHALT_VAL_MAX = 170
+C_ROAD_MAX_HEIGHT_FRAC = 0.22
