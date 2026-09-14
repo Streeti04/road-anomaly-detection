@@ -63,3 +63,16 @@ C_ASPHALT_SAT_MIN = 20
 C_ASPHALT_LOW_SAT_VAL_MAX = 130  # low-saturation pixels are accepted only when not bright sidewalk
 C_ASPHALT_VAL_MAX = 170
 C_ROAD_MAX_HEIGHT_FRAC = 0.22
+
+# --- Part D (Conv-AE on road patches) -----------------------------------------
+# Stage 1 = dry run on data/mini, Stage 2 = pool run; same code paths,
+# stage-dependent values are looked up, not branched.
+D_DATA_DIR = {1: MINI_DIR, 2: POOL_DIR}  # raw images per stage
+D_CAP_PER_IMAGE = 24  # max patches per image, budget split ∝ allowed area per band
+D_VAL_FRAC = 0.10  # validation split BY IMAGE_ID, no patch-level leakage
+D_EPOCHS = {1: 30, 2: 20}  # dry run: minutes-scale proof of concept; pool: <= 2 h budget
+D_BATCH = {1: 64, 2: 256}  # small stage-1 batches (MPS risk); 256 for stage 2
+D_LR = 1e-3  # Adam learning rate
+D_NOISE_STD = 0.02  # denoising AE: input + N(0, 0.02) on [0,1] floats
+D_FILTER_PATCH_CONFOUNDERS = True  # skip only configured non-road labels during shard extraction
+D_EXCLUDE_PATCH_LABELS = {"vegetation"}  # keep markings/shadows for training variety; E handles ranking
