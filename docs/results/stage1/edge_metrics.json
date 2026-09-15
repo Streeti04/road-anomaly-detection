@@ -1,0 +1,22 @@
+{
+  "best_epoch": 30,
+  "metrics": {
+    "train": {
+      "n_patches": 672,
+      "mse": 0.0025370777778637907,
+      "edge": 0.04219400290665882
+    },
+    "val": {
+      "n_patches": 282,
+      "mse": 0.0035616679136486105,
+      "edge": 0.05123175802832165
+    },
+    "buffer": {
+      "n_patches": 42,
+      "mse": 0.0033307660653788063,
+      "edge": 0.05501285833971841
+    }
+  },
+  "patch_manifest_sha256": "7daa70fd58b0e86ad292de279ed36323c905f149e0456d4d3202ee34d2477063",
+  "checkpoint_sha256": "fae4ff411b475731d87606c6b4b123e7f658ea41eae284ac67d2b1d6f93be425"
+}
