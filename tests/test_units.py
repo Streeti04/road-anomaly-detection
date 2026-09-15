@@ -398,3 +398,345 @@ def test_fetch_models_rejects_bad_checksum(tmp_path, monkeypatch):
     assert not (models_dir / "bad.bin.part").exists() # temp cleaned up
 
 
+# --- Part D, Stage 1 ---------------------------------------------------------
+# torch-free pure functions only: model + training loop are verified by running
+# the actual documented dry run, never under pytest.
+
+part_d = importlib.import_module("aibip.part_d")
+part_e = importlib.import_module("aibip.part_e")
+
+
+def test_part_d_patch_center_seed_stable():
+    seed = part_d.patch_center_seed("WE1MY5C5")
+    assert seed == part_d.patch_center_seed("WE1MY5C5")   # stable across calls
+    assert seed != part_d.patch_center_seed("WE7EJMKD")   # differs per image
+    assert 0 <= seed < 2 ** 32                            # crc32 range
+    with pytest.raises(ValueError):
+        part_d.patch_center_seed("")
+
+
+def test_part_d_band_edges_split_span():
+    edges = part_d.band_edges(np.array([100, 104, 500]))
+    assert edges.tolist() == [100, 200, 300, 400, 501]    # last edge = max + 1
+    band = np.searchsorted(edges, 500, side="right") - 1
+    assert band == config.N_BANDS - 1                     # deepest road row in band 3
+    with pytest.raises(ValueError):
+        part_d.band_edges(np.array([], dtype=int))
+    with pytest.raises(ValueError):
+        part_d.band_edges(np.array([10, 11, 12]))         # span 2 < n_bands
+
+
+def test_part_d_alloc_budget_proportional_and_capped():
+    weights = np.array([600, 300, 90, 10])
+    alloc = part_d.alloc_budget(weights, 24)
+    assert alloc.sum() == 24
+    assert alloc[0] >= alloc[1] >= alloc[2] >= alloc[3]   # monotone with weight
+    assert np.all(part_d.alloc_budget(weights, 24) == alloc)  # deterministic
+    assert np.all(part_d.alloc_budget(weights, 10_000) == weights)  # capped at capacity
+    zero_band = part_d.alloc_budget(np.array([3, 1000, 0, 900]), 24)
+    assert zero_band[2] == 0 and zero_band.sum() == 24    # empty band stays empty
+    big = part_d.alloc_budget(np.array([10, 1000, 1000]), 10_000)
+    assert np.all(big <= np.array([10, 1000, 1000])) and big.sum() == 2010
+    with pytest.raises(ValueError):
+        part_d.alloc_budget(np.array([], dtype=int), 5)
+    with pytest.raises(ValueError):
+        part_d.alloc_budget(weights, -1)
+
+
+def test_part_d_plan_centers_inside_allowed_region():
+    mask = np.zeros((614, 2048), dtype=bool)
+    mask[100:500, 200:1800] = True
+    centers = part_d.plan_centers(mask, "TESTID")
+    assert 0 < len(centers) <= config.D_CAP_PER_IMAGE
+    assert sorted({c["band"] for c in centers}) == [0, 1, 2, 3]  # all bands used
+    region = part_c.allowed_region(mask)
+    r = config.PATCH // 2
+    for c in centers:
+        assert 0 <= c["band"] < config.N_BANDS
+        assert region[c["row"], c["col"]]                 # center in allowed region ...
+        assert 100 + r <= c["row"] < 500 - r              # ... so the patch is fully road
+        assert 200 + r <= c["col"] < 1800 - r
+    assert centers == part_d.plan_centers(mask, "TESTID")  # deterministic per image_id
+    assert centers != part_d.plan_centers(mask, "OTHER")    # and seeded per image_id
+    # a road region touching the right image border must still yield in-frame
+    # patches (erosion alone would allow centers with < PATCH//2 columns left)
+    border_mask = np.zeros((614, 2048), dtype=bool)
+    border_mask[100:500, 1500:2048] = True
+    for c in part_d.plan_centers(border_mask, "BORDER"):
+        assert config.PATCH // 2 <= c["col"] < 2048 - config.PATCH // 2
+
+
+def test_part_d_split_by_image_id():
+    ids = [f"WE{i:04d}" for i in range(100)]
+    train, val = part_d.split_ids(ids)
+    assert len(val) == 10 and len(train) == 90
+    assert set(train) | set(val) == set(ids)
+    assert not set(train) & set(val)                      # no id on both sides
+    assert train == sorted(train) and val == sorted(val)
+    assert (train, val) == part_d.split_ids(ids)          # deterministic under SEED
+    with pytest.raises(ValueError):
+        part_d.split_ids(["only_one"])
+    with pytest.raises(ValueError):
+        part_d.split_ids(ids, val_frac=1.0)
+
+
+def test_part_d_select_rows_partition_no_leakage():
+    rows = [{"patch_idx": i, "image_id": f"img{i % 4}", "band": 0, "row": i, "col": i}
+            for i in range(8)]
+    train_rows = part_d.select_rows(rows, ["img0", "img1"])
+    val_rows = part_d.select_rows(rows, ["img2", "img3"])
+    assert [r["patch_idx"] for r in train_rows] == [0, 1, 4, 5]
+    assert [r["patch_idx"] for r in val_rows] == [2, 3, 6, 7]
+    assert not {r["image_id"] for r in train_rows} & {r["image_id"] for r in val_rows}
+    with pytest.raises(ValueError):
+        part_d.select_rows(rows, ["missing_id"])
+
+
+def test_part_d_index_roundtrip(tmp_path):
+    rows = [{"patch_idx": 0, "image_id": "A", "band": 0, "row": 100, "col": 200},
+            {"patch_idx": 1, "image_id": "B", "band": 3, "row": 400, "col": 1800}]
+    path = tmp_path / "index.csv"
+    part_d.write_index(path, rows)
+    assert part_d.read_index(path) == rows                # typed roundtrip
+    with pytest.raises(FileNotFoundError):
+        part_d.read_index(tmp_path / "missing.csv")
+
+
+def test_part_d_rejects_only_configured_patch_labels():
+    assert part_d.reject_patch_label("") is False
+    assert part_d.reject_patch_label("marking") is False
+    assert part_d.reject_patch_label("shadow") is False
+    assert part_d.reject_patch_label("vegetation") is True
+    assert part_d.reject_patch_label("vegetation+marking") is True
+
+
+def test_part_d_shard_memmap_roundtrip(tmp_path):
+    # mirrors the extract() usage of np.lib.format.open_memmap (cache)
+    shard_path = tmp_path / "shard.npy"
+    data = np.random.default_rng(config.SEED).integers(
+        0, 255, size=(4, 16, 16, 3), dtype=np.uint8)
+    shard = np.lib.format.open_memmap(
+        shard_path, mode="w+", dtype=np.uint8, shape=data.shape)
+    shard[:] = data
+    shard.flush()
+    del shard
+    loaded = np.load(shard_path, mmap_mode="r")
+    assert loaded.dtype == np.uint8 and loaded.shape == data.shape
+    assert np.array_equal(np.asarray(loaded[:]), data)
+
+
+def test_part_d_still_lazy():
+    part_d_mod = importlib.import_module("aibip.part_d")
+    assert callable(part_d_mod.extract)
+    # importing part_d (via part_b/part_c helpers) must not pull in torch
+    assert "torch" not in sys.modules
+
+
+# --- Part E (T5) --------------------------------------------------------------
+
+def test_part_e_robust_band_stats_and_z_scores():
+    errors = np.array([1.0, 2.0, 3.0, 10.0, 11.0, 12.0])
+    bands = np.array([0, 0, 0, 1, 1, 1])
+    stats = part_e.robust_band_stats(errors, bands, n_bands=3)
+    assert sorted(stats) == [0, 1]
+    assert stats[0]["median"] == pytest.approx(2.0)
+    assert stats[1]["median"] == pytest.approx(11.0)
+    z = part_e.band_z_scores(np.array([2.0, 11.0]), np.array([0, 1]), stats)
+    assert np.allclose(z, [0.0, 0.0])
+    high = part_e.band_z_scores(np.array([3.4826]), np.array([0]), stats)
+    assert high[0] == pytest.approx(1.0)
+    with pytest.raises(ValueError):
+        part_e.robust_band_stats(np.array([1.0]), np.array([0, 1]))
+
+
+def test_part_e_robust_band_stats_skips_tiny_bands():
+    errors = np.array([1.0, 2.0, 10.0, 11.0, 12.0])
+    bands = np.array([0, 0, 1, 1, 1])
+
+    stats = part_e.robust_band_stats(errors, bands, n_bands=2, min_count=3)
+    z = part_e.band_z_scores(np.array([2.0]), np.array([0]), stats)
+
+    assert sorted(stats) == [1]
+    assert abs(float(z[0])) < 2.0
+
+
+def test_part_e_robust_band_stats_applies_scale_floor():
+    stats = part_e.robust_band_stats(
+        np.array([1.0, 1.0, 1.0]), np.array([0, 0, 0]),
+        min_scale=0.25)
+
+    assert stats[0]["scale"] == pytest.approx(0.25)
+
+
+def test_part_e_top_fraction_mean():
+    values = np.array([1.0, 2.0, 3.0, 100.0])
+    assert part_e.top_fraction_mean(values, frac=0.25) == pytest.approx(100.0)
+    assert part_e.top_fraction_mean(values, frac=0.50) == pytest.approx(51.5)
+    with pytest.raises(ValueError):
+        part_e.top_fraction_mean(np.array([]))
+    with pytest.raises(ValueError):
+        part_e.top_fraction_mean(values, frac=0.0)
+
+
+def test_part_e_aggregate_image_scores_ranks_by_p90_z():
+    rows = [
+        {"patch_idx": 0, "image_id": "A", "band": 0, "row": 10, "col": 20},
+        {"patch_idx": 1, "image_id": "A", "band": 0, "row": 11, "col": 21},
+        {"patch_idx": 2, "image_id": "B", "band": 1, "row": 12, "col": 22},
+        {"patch_idx": 3, "image_id": "B", "band": 1, "row": 13, "col": 23},
+        {"patch_idx": 4, "image_id": "A", "band": 0, "row": 14, "col": 24},
+        {"patch_idx": 5, "image_id": "A", "band": 0, "row": 15, "col": 25},
+        {"patch_idx": 6, "image_id": "B", "band": 1, "row": 16, "col": 26},
+        {"patch_idx": 7, "image_id": "B", "band": 1, "row": 17, "col": 27},
+    ]
+    errors = np.array([0.1, 0.2, 0.5, 0.6, 0.15, 0.25, 0.55, 0.65])
+    z_scores = np.array([0.0, 0.5, 1.0, 3.0, 0.2, 0.3, 2.0, 2.0])
+    records = part_e.aggregate_image_scores(
+        rows, errors, z_scores, model_stage=1, analysis_stage=1, baseline_stage=1)
+    assert [r["image_id"] for r in records] == ["A", "B"]
+    assert [r["rank"] for r in records] == [1, 2]
+    assert records[1]["score_status"] == "ok"
+    assert records[1]["worst_patch_idx"] == 3
+    assert records[1]["condition_score"] == pytest.approx(3.0)
+    assert records[1]["score_mean_z"] == pytest.approx(2.0)
+
+
+def test_part_e_aggregate_can_exclude_confounder_patches():
+    rows = [
+        {"patch_idx": 0, "image_id": "A", "band": 0, "row": 10, "col": 20},
+        {"patch_idx": 1, "image_id": "A", "band": 0, "row": 11, "col": 21},
+        {"patch_idx": 2, "image_id": "B", "band": 1, "row": 12, "col": 22},
+        {"patch_idx": 3, "image_id": "B", "band": 1, "row": 13, "col": 23},
+    ]
+    errors = np.array([0.1, 0.9, 0.2, 0.3])
+    z_scores = np.array([0.1, 20.0, 0.2, 0.3])
+    records = part_e.aggregate_image_scores(
+        rows, errors, z_scores, model_stage=1, analysis_stage=1, baseline_stage=1,
+        confounder_labels=["", "vegetation", "", ""])
+    a = next(r for r in records if r["image_id"] == "A")
+    assert a["raw_condition_score"] == pytest.approx(20.0)
+    assert a["condition_score"] == pytest.approx(0.1)
+    assert a["n_scored_patches"] == 1
+    assert a["n_excluded_patches"] == 1
+    assert a["worst_patch_idx"] == 0
+    assert a["score_status"] == "confounded"
+
+
+def test_part_e_aggregate_marks_images_with_too_few_patches_low_support():
+    rows = [
+        {"patch_idx": 0, "image_id": "A", "band": 0, "row": 10, "col": 20},
+        {"patch_idx": 1, "image_id": "B", "band": 0, "row": 11, "col": 21},
+        {"patch_idx": 2, "image_id": "B", "band": 1, "row": 12, "col": 22},
+        {"patch_idx": 3, "image_id": "B", "band": 1, "row": 13, "col": 23},
+        {"patch_idx": 4, "image_id": "B", "band": 2, "row": 14, "col": 24},
+    ]
+    errors = np.array([0.5, 0.1, 0.2, 0.3, 0.4])
+    z_scores = np.array([9.0, 0.1, 0.2, 0.3, 0.4])
+
+    records = part_e.aggregate_image_scores(
+        rows, errors, z_scores, model_stage=1, analysis_stage=1, baseline_stage=1)
+    by_id = {r["image_id"]: r for r in records}
+
+    assert by_id["A"]["score_status"] == "low_support"
+    assert by_id["A"]["n_scored_patches"] == 1
+    assert by_id["B"]["score_status"] == "ok"
+
+
+def test_part_e_confounder_review_uses_excluded_patch():
+    records = [
+        {"image_id": "A", "worst_patch_idx": 0},
+        {"image_id": "B", "worst_patch_idx": 3},
+    ]
+    rows_by_patch = {
+        0: {"image_id": "A", "patch_idx": 0, "band": 0, "row": 10, "col": 20},
+        1: {"image_id": "A", "patch_idx": 1, "band": 2, "row": 30, "col": 40},
+        2: {"image_id": "A", "patch_idx": 2, "band": 1, "row": 50, "col": 60},
+        3: {"image_id": "B", "patch_idx": 3, "band": 0, "row": 70, "col": 80},
+    }
+    z_by_patch = {0: 9.0, 1: 2.0, 2: 5.0, 3: 1.0}
+    label_by_patch = {0: "", 1: "shadow", 2: "marking", 3: ""}
+
+    review = part_e.confounder_review_records(
+        records, rows_by_patch, z_by_patch, label_by_patch, n=12)
+
+    assert len(review) == 1
+    assert review[0]["image_id"] == "A"
+    assert review[0]["worst_patch_idx"] == 2
+    assert review[0]["worst_patch_confounder"] == "marking"
+    assert review[0]["worst_band"] == 1
+
+
+def test_part_e_patch_confounder_label_color_rules():
+    grass = np.full((128, 128, 3), (40, 120, 40), dtype=np.uint8)
+    dry_grass = np.full((128, 128, 3), (60, 115, 145), dtype=np.uint8)
+    marking = np.full((128, 128, 3), (220, 220, 220), dtype=np.uint8)
+    asphalt = np.full((128, 128, 3), (95, 95, 95), dtype=np.uint8)
+    assert patch_confounder_label(grass) == "vegetation"
+    assert patch_confounder_label(dry_grass) == "vegetation"
+    assert patch_confounder_label(marking) == "marking"
+    assert patch_confounder_label(asphalt) == ""
+
+
+def test_patch_confounder_label_thin_marking_and_shadow():
+    asphalt = np.full((128, 128, 3), (95, 95, 95), dtype=np.uint8)
+    thin_marking = asphalt.copy()
+    thin_marking[:, 58:66] = (210, 210, 210)
+    shadow = np.full((128, 128, 3), (135, 135, 135), dtype=np.uint8)
+    shadow[:, :58] = (45, 45, 45)
+    dark_asphalt = np.full((128, 128, 3), (55, 55, 55), dtype=np.uint8)
+
+    assert patch_confounder_label(thin_marking) == "marking"
+    assert patch_confounder_label(shadow) == "shadow"
+    assert patch_confounder_label(dark_asphalt) == ""
+    assert patch_confounder_label(dark_asphalt, strict=True) == "shadow"
+
+
+def test_patch_confounder_label_dappled_shadow():
+    patch = np.full((128, 128, 3), (125, 125, 125), dtype=np.uint8)
+    patch[10:118:2, :] = (60, 60, 60)
+
+    assert patch_confounder_label(patch) == "shadow"
+
+
+def test_patch_confounder_label_strict_faint_marking():
+    asphalt = np.full((128, 128, 3), (95, 95, 95), dtype=np.uint8)
+    faint_marking = asphalt.copy()
+    faint_marking[:, 62:66] = (140, 140, 140)  # below white v>=145, above strict v>=128
+
+    assert patch_confounder_label(faint_marking) == ""
+    assert patch_confounder_label(faint_marking, strict=True) == "marking"
+
+
+# ---------------------------------------------------------------- stats module
+
+def test_robust_z_basic_and_constant():
+    from aibip.stats import robust_z
+
+    z = robust_z([1.0, 2.0, 3.0, 4.0, 100.0])   # median 3, MAD 1
+    assert z.shape == (5,)
+    assert z[0] < z[1] < 0                       # below median -> negative
+    assert z[2] == pytest.approx(0.0)            # == median -> zero
+    assert z[3] > 0 and z[3] < 1                 # slightly above median
+    assert z[4] > 3.0                            # 100 is a clear robust outlier
+    assert robust_z([7.0, 7.0, 7.0]) is None     # MAD == 0 -> no flags possible
+
+
+def test_outlier_flag_rows_labels_and_order():
+    from aibip.stats import outlier_flag_rows
+
+    # m1: median 1.0, MAD 0.1 -> only E (50.0) flags; m2: median 1.1, MAD 0.1
+    # -> only D (50.0) flags. Record order (D before E) must beat metric
+    # tuple order (m1 first), proving the documented stable ordering.
+    records = [{"image_id": "A", "m1": 1.0, "m2": 1.0},
+               {"image_id": "B", "m1": 1.1, "m2": 1.0},
+               {"image_id": "C", "m1": 0.9, "m2": 1.1},
+               {"image_id": "D", "m1": 1.0, "m2": 50.0},
+               {"image_id": "E", "m1": 50.0, "m2": 1.2}]
+    rows = outlier_flag_rows(records, ("m1", "m2"), stage="X", reason="test_outlier")
+    assert [(r["image_id"], r["metric"], r["stage"], r["reason"]) for r in rows] == [
+        ("D", "m2", "X", "test_outlier"), ("E", "m1", "X", "test_outlier")]
+    assert all(r["value"] == 50.0 and r["z"] > 3.0 for r in rows)
+    assert outlier_flag_rows([], ("m1",), stage="X", reason="r") == []
+    # a constant metric (MAD == 0) yields no flags even with extreme values
+    flat = [{"image_id": i, "m": 1.0} for i in "ABC"] + [{"image_id": "D", "m": 99.0}]
+    assert outlier_flag_rows(flat, ("m",), stage="X", reason="r") == []
