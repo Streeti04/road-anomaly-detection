@@ -76,3 +76,8 @@ D_LR = 1e-3  # Adam learning rate
 D_NOISE_STD = 0.02  # denoising AE: input + N(0, 0.02) on [0,1] floats
 D_FILTER_PATCH_CONFOUNDERS = True  # skip only configured non-road labels during shard extraction
 D_EXCLUDE_PATCH_LABELS = {"vegetation"}  # keep markings/shadows for training variety; E handles ranking
+
+# --- Part E (Ranking) --------------------------------------------------------
+E_MIN_BASELINE_PER_BAND = 8  # fewer validation patches make per-band z scores unstable
+E_MIN_Z_SCALE = 5e-4  # floor for z-score scale; prevents tiny-MAD explosions in mini runs
+E_MIN_SCORABLE_PATCHES = 4  # images with fewer clean patches are review-only, not reliable ranks
