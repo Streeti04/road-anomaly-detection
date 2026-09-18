@@ -1,0 +1,45 @@
+{
+  "baseline_commit": "d3c780e",
+  "approved_lf_sha256": {
+    "d_data.py": "cdc000288e14ac8da4fc746477ac4a970c12b6fb60b4e04b03d82b1ce0e25460",
+    "pool_data.py": "f46d40911b9196269f8d0c3ad6b0019ed6f0c5363017f0dac5eaf424f94d1bf6",
+    "c_transfer.py": "9eaf781f71e7e32680233c0643b1b3a71c734337bdeca63eaf73e68b204549d8",
+    "d_pool.py": "2a3126af989e051afadc1242f927aa74aa41fe9e601180b1152f7fd8f462bf8e",
+    "part_c.py": "dc5a2fccc354538344098ce679d9c8b371d1067e6c864841c6ee6a12872116f1",
+    "c_test_core.py": "c64ee8f29c4799092c9c5523eaec863989db4cdf85979b8f48f024e62d7e09b6",
+    "b_refactor_compat.py": "d4f0d6b270c2413cc57d8a3eda21a31bbe37e30e871b7475a0aa0c0f43adddd8",
+    "part_b.py": "9a13390b055599c4806b1673a449ab3621967c1c4e7013cdbbc3df13d9584daf"
+  },
+  "description": "Exact source relocation: B owns crop, RGB resize and coordinate mapping; D pixels unchanged. Run tests/test_b_refactor.py before reuse.",
+  "legacy_sha256": {
+    "d_pool.py": [
+      "e038bea6494e0d83dc59e530440973e73f1251f388e972d47a73c3082c2138bf",
+      "ee9f4dea818c152364ced1b3e625d2c875c166117026f11c28c29c04eeed9af8"
+    ],
+    "part_c.py": [
+      "4ee2027df2e6e1cdc7df3ff84d5cad19a730505a4f2bb319b1037393ddd6cfad",
+      "6e8664e6834c50d902eafe88d99b35d88e899965c6afcfc0e466938a7105715e"
+    ],
+    "c_transfer.py": [
+      "98e25ab716d66e97345dace37419299aa2eada391e65b7741247df8e2866adb5",
+      "7f4bbc78af3b144a4024b2d13077509d4ebf6f81a9e0388d4edea6d83ba40080"
+    ],
+    "part_b.py": [
+      "d3821e806e3ee57f1da73bfc8e981341c05487c22133dd9021c46074de6f4807",
+      "aa124034fa3a6976393e7e9fc2727c7bda7cb6a1a8fa7f76517c943ce34aeba5",
+      "eb856310f1020cc1724532d845ed2788b729042d3f1e2c0ae9205862c82754e2"
+    ],
+    "c_test_core.py": [
+      "f03ffcc97c8b7d7eea321c19175337f05585e16deadd23b660ec9ce6640af4d0",
+      "c973e74922eef7999dfe87d0bd4f59ceed4f29e27f24c35c8c66662f547047d4"
+    ],
+    "d_data.py": [
+      "9a97fc2f8eb57929643a40d3076f6171769d8c8bf72452513c678ed2c62cf801",
+      "7cf0b572da76620249eb55c87b3396dcb7d24522ff64ec9866f5c55c440f6d09"
+    ],
+    "pool_data.py": [
+      "572d1acd56ba14dcbd38905b27570cfd603e05b374143047acaf9ddc3521aa91",
+      "814a9112784f50b92eaff98e7e5de212668cbccd8c8141e852b669624b3f50af"
+    ]
+  }
+}
