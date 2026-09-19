@@ -1,0 +1,32 @@
+{
+  "stage": 2,
+  "best_epoch": 29,
+  "checkpoint_sha256": "72300c8980153d3669c3297cd26e2ecc64986e10d0570f459d2695a3c509600a",
+  "patch_manifest_sha256": "6c28cb0163a8c7bd471548d558cfa3bc0bbf7607474104db60bb6d9c8e60942a",
+  "n_images": 108,
+  "n_scored": 108,
+  "n_patches": 996,
+  "condition_signal": "mean patch RGB-channel MSE (BGR storage)",
+  "error_scale": [
+    0,
+    0.01
+  ],
+  "representative": "maximum-error patch per ranked image",
+  "typical_patch_indices": [
+    2051,
+    4071,
+    10999,
+    2011,
+    13644,
+    10936
+  ],
+  "anomalous_patch_indices": [
+    3823,
+    10147,
+    10090,
+    9760,
+    10283,
+    10506
+  ],
+  "interpretation": "Visual unusualness, not a damage probability; Mini may overlap training"
+}

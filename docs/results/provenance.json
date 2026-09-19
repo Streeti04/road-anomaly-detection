@@ -1,0 +1,116 @@
+[
+  {
+    "source": "outputs/d_v2/runs/mse/stage1/loss_curve.png",
+    "documented_copy": "docs/results/stage1/loss_curve.png",
+    "sha256": "473F4136CDCF8AE829B83AB34CABCB8A6381F953389EAC7598734931321A0461",
+    "bytes": 79958
+  },
+  {
+    "source": "outputs/d_v2/runs/mse/stage1/validation_preview.jpg",
+    "documented_copy": "docs/results/stage1/validation_preview.jpg",
+    "sha256": "04EDA4B6AE5B4AB57F25D24F36E8442D292F567E0D9D9AECE2509B6DBCB5BFD1",
+    "bytes": 471282
+  },
+  {
+    "source": "outputs/d_v2/runs/mse/stage1/best_patches.jpg",
+    "documented_copy": "docs/results/stage1/best_patches.jpg",
+    "sha256": "6DFC33EF046B576943D14743FCA2D7C4E57F56E5F83E5077DF7FCA8ADD99FD5F",
+    "bytes": 161283
+  },
+  {
+    "source": "outputs/d_v2/runs/mse/stage1/worst_patches.jpg",
+    "documented_copy": "docs/results/stage1/worst_patches.jpg",
+    "sha256": "62D9827CABB5B00BFA482C4FBB86145CB92F88FA6F8783541B6FD8DD8B68D5D5",
+    "bytes": 270714
+  },
+  {
+    "source": "outputs/d_v2/runs/mse/stage1/metrics.json",
+    "documented_copy": "docs/results/stage1/metrics.json",
+    "sha256": "F9D7D0D1C99B0462A6E4F11B727EB3C189A143903846FD820F3979739CB9B4BB",
+    "bytes": 595
+  },
+  {
+    "source": "outputs/d_v2/runs/mse_edge/stage1/validation_preview.jpg",
+    "documented_copy": "docs/results/stage1/edge_validation_preview.jpg",
+    "sha256": "B5B03A24DA63B766F56F7EF291FB28EFB3C975807633A22E3B684A2D88BA8849",
+    "bytes": 469455
+  },
+  {
+    "source": "outputs/d_v2/runs/mse_edge/stage1/metrics.json",
+    "documented_copy": "docs/results/stage1/edge_metrics.json",
+    "sha256": "1320CCE30EEB06C70721124D6E2E6F2C7D08F2EB69B9380DBCAE0AE3E80CE6F3",
+    "bytes": 594
+  },
+  {
+    "source": "outputs/d_stage2/runs/mse/stage2/loss_curve.png",
+    "documented_copy": "docs/results/stage2/loss_curve.png",
+    "sha256": "22DCC7817D4688821BBF70D3B3701B5AB2C2288F22D5C3394E06A0DBEC5BE81B",
+    "bytes": 73407
+  },
+  {
+    "source": "outputs/d_stage2/runs/mse/stage2/validation_preview.jpg",
+    "documented_copy": "docs/results/stage2/validation_preview.jpg",
+    "sha256": "31B4D58752204DDE4C453A8460F9FE58F01AA9559C3DAFF971ECA7D29D56B4E2",
+    "bytes": 437116
+  },
+  {
+    "source": "outputs/d_stage2/runs/mse/stage2/metrics.json",
+    "documented_copy": "docs/results/stage2/metrics.json",
+    "sha256": "5F7468641C7EEF553C4E1958D0891DE55A6C5D66C6D18FE450A85078616E26BC",
+    "bytes": 599
+  },
+  {
+    "source": "outputs/d_stage2/runs/mse/stage2/history.csv",
+    "documented_copy": "docs/results/stage2/history.csv",
+    "sha256": "2B1A48644D702FAB19980728B9A572506290835544D0FB32DDB3E89221D8C10A",
+    "bytes": 4188
+  },
+  {
+    "source": "outputs/d_stage2/runs/mse/stage2/mini_analysis/most_typical.jpg",
+    "documented_copy": "docs/results/stage2/most_typical.jpg",
+    "sha256": "9FED6EA8575EF77C87A47F3C0C82ED5F29DD83B1BE30B7A7649C88353CA9AF83",
+    "bytes": 211756
+  },
+  {
+    "source": "outputs/d_stage2/runs/mse/stage2/mini_analysis/most_anomalous.jpg",
+    "documented_copy": "docs/results/stage2/most_anomalous.jpg",
+    "sha256": "94DE3F1D107466FFDCA27FC08BCB538F770322F5421448FE9461B0B0DB3AB897",
+    "bytes": 304055
+  },
+  {
+    "source": "outputs/d_stage2/runs/mse/stage2/mini_analysis/mini_best_patches.jpg",
+    "documented_copy": "docs/results/stage2/mini_best_patches.jpg",
+    "sha256": "750F49FC4C7E2CB9149B61E87CD21BCDAED9C164436223AE012DFA401D5FB39F",
+    "bytes": 179392
+  },
+  {
+    "source": "outputs/d_stage2/runs/mse/stage2/mini_analysis/mini_worst_patches.jpg",
+    "documented_copy": "docs/results/stage2/mini_worst_patches.jpg",
+    "sha256": "5CE466337184AAFE928A5D7543EF43FF6E84CDBF2C409C992FC05EFD50A6A6BA",
+    "bytes": 306849
+  },
+  {
+    "source": "outputs/d_stage2/runs/mse/stage2/mini_analysis/ranking.csv",
+    "documented_copy": "docs/results/stage2/ranking.csv",
+    "sha256": "C1D292A561DEC031028F4B8AD14AB99CB2178A27D9AF763A14D00FDCC521C924",
+    "bytes": 7767
+  },
+  {
+    "source": "outputs/d_stage2/runs/mse/stage2/mini_analysis/patch_scores.csv",
+    "documented_copy": "docs/results/stage2/patch_scores.csv",
+    "sha256": "A504DDE9912C0700DB7D004D98F827649A665C0049A79B42430871F7352D7590",
+    "bytes": 47330
+  },
+  {
+    "source": "outputs/d_stage2/runs/mse/stage2/mini_analysis/analysis.json",
+    "documented_copy": "docs/results/stage2/analysis.json",
+    "sha256": "5299DE02E20917DFAB1BA28AB66439FF37CE37971CD348CBBAC9AAA79DF2FA1C",
+    "bytes": 767
+  },
+  {
+    "source": "outputs/d_stage2/extraction_audit.json",
+    "documented_copy": "docs/results/stage2/extraction_audit.json",
+    "sha256": "A7BE74AE06AD1F013ED0A92633A7887BC3D80249A81778C643EBD78943E63EF4",
+    "bytes": 298886
+  }
+]
