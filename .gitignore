@@ -16,3 +16,8 @@ logs/
 .ipynb_checkpoints/
 
 # outputs/ holds masks/, patches/, runs/, flags.csv — all regenerable
+
+
+# local test runs and code backups
+.cache/
+.backups/
