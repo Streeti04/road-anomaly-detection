@@ -146,6 +146,20 @@ docs/results/        metrics, learning curves, previews, rankings (3 runs)
 - [`docs/part_a_answers.md`](docs/part_a_answers.md) — written conceptual foundations (A.1–A.5)
 - [`Anleitung.md`](Anleitung.md) — reproduction guide for your own images
 
+## Data
+
+This repository contains **no image data and no trained weights** — both stay
+out of git on purpose.
+
+- **Images.** The documented runs used a street-level panorama campaign
+  (Cyclomedia capture data, ~8k × 6k px JPEGs) that I can't redistribute.
+  Provide your own panoramas under `data/` (plain JPEG folder + the metadata
+  JSON with capture coordinates used for the spatial split — see
+  `Anleitung.md`). The patch tiles shown under `docs/results/` are small
+  crops included solely to document the results.
+- **Model weights.** `aibip.fetch_models` downloads MobileSAM once, pinned by
+  SHA-256, into `models/` (gitignored).
+
 ## Limitations
 
 - Reconstruction error is an *anomaly signal*, not a damage class — rankings
